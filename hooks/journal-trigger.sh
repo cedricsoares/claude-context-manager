@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # ~/.claude/hooks/journal-trigger.sh
 #
-# Déclencheur du sub-agent journalisation memory-keeper.
-# Utilisé par les hooks Stop et PreCompact dans settings.json.
+# Trigger for the memory-keeper journaling sub-agent.
+# Used by the Stop and PreCompact hooks in settings.json.
 #
-# Reçoit le payload JSON de Claude Code via stdin.
-# Détecte si la session mérite une journalisation et invoque le sub-agent journal.
+# Receives the JSON payload from Claude Code via stdin.
+# Detects whether the session warrants journaling and invokes the journal sub-agent.
 
 set -euo pipefail
 
-# --- Résolution robuste du binaire claude ---
+# --- Robust resolution of the claude binary ---
 CLAUDE_BIN=""
 for candidate in \
     "$HOME/.local/bin/claude" \
@@ -24,44 +24,44 @@ if [ -z "$CLAUDE_BIN" ]; then
   CLAUDE_BIN=$(command -v claude 2>/dev/null || true)
 fi
 if [ -z "$CLAUDE_BIN" ]; then
-  exit 0  # claude introuvable — sortie silencieuse
+  exit 0  # claude not found — exit silently
 fi
 
-# --- Lire le payload JSON ---
+# --- Read the JSON payload ---
 INPUT=$(cat)
 
 HOOK_EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // "unknown"')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""')
 CWD=$(echo "$INPUT"        | jq -r '.cwd // ""')
-TRIGGER=$(echo "$INPUT"    | jq -r '.trigger // ""')          # pour PreCompact
-STOP_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')  # pour Stop
+TRIGGER=$(echo "$INPUT"    | jq -r '.trigger // ""')          # for PreCompact
+STOP_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false')  # for Stop
 
-# --- Garder de sauvegarder si PreCompact est deja actif (eviter les boucles) ---
+# --- Skip save if PreCompact is already active (avoid loops) ---
 if [ "$STOP_ACTIVE" = "true" ]; then
   exit 0
 fi
 
-# --- Cas PreCompact : toujours déclencher ---
+# --- Case PreCompact: always trigger ---
 if [ "$HOOK_EVENT" = "PreCompact" ]; then
   "$CLAUDE_BIN" -p "Use the journal agent to journalise this session.
 trigger=precompact
 transcript_path=$TRANSCRIPT
 cwd=$CWD
-context=PreCompact imminent — sauvegarde le contexte avant perte." \
+context=PreCompact imminent — save context before loss." \
     --dangerously-skip-permissions \
     2>/dev/null || true
   exit 0
 fi
 
-# --- Cas Stop : détecter si un événement significatif s'est produit ---
+# --- Case Stop: detect whether a significant event occurred ---
 if [ "$HOOK_EVENT" = "Stop" ]; then
 
-  # Pas de transcript = impossible de décider
+  # No transcript = cannot decide
   if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
     exit 0
   fi
 
-  # Extraire les outils utilisés dans les derniers échanges
+  # Extract tools used in the latest exchanges
   LAST_TOOLS=$(tail -n 100 "$TRANSCRIPT" | python3 -c "
 import sys, json
 tools = []
@@ -81,20 +81,20 @@ for line in sys.stdin:
 print(','.join(tools))
 " 2>/dev/null)
 
-  # Définir les outils déclencheurs
+  # Define trigger tools
   WRITE_EDIT_PATTERN="Write|Edit|MultiEdit|NotebookEdit"
   BASH_SIGNIFICANT_PATTERN="git commit|git push|terraform apply|terraform plan|dbt run|dbt test|dbt build|prefect|kubectl apply|gcloud|npm run|pytest|go test"
 
   SHOULD_TRIGGER=false
   DETECTED=""
 
-  # Vérifier Write/Edit
+  # Check for Write/Edit
   if echo "$LAST_TOOLS" | grep -qE "$WRITE_EDIT_PATTERN"; then
     SHOULD_TRIGGER=true
     DETECTED="write_edit"
   fi
 
-  # Vérifier les commandes Bash significatives
+  # Check for significant Bash commands
   if [ "$SHOULD_TRIGGER" = "false" ]; then
     LAST_BASH_COMMANDS=$(tail -n 100 "$TRANSCRIPT" | python3 -c "
 import sys, json
@@ -125,12 +125,12 @@ print('\n'.join(cmds))
     fi
   fi
 
-  # Rien de significatif détecté → ne pas déclencher
+  # Nothing significant detected — do not trigger
   if [ "$SHOULD_TRIGGER" = "false" ]; then
     exit 0
   fi
 
-  # Invoquer le sub-agent journal
+  # Invoke the journal sub-agent
   "$CLAUDE_BIN" -p "Use the journal agent to journalise this session.
 trigger=stop_event
 detected_tools=$LAST_TOOLS
@@ -142,5 +142,5 @@ cwd=$CWD" \
   exit 0
 fi
 
-# Autre événement non géré
+# Other unhandled event
 exit 0
