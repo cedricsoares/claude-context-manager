@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **memory-keeper-hooks** is a Claude Code extension that adds automatic journaling via hooks and a sub-agent on top of the `memory-keeper-workflow` plugin. It is **not a standalone application** — it extends an existing MCP server (`mcp-memory-keeper`) by installing Claude Code hooks, skills, and a sub-agent into `~/.claude/`.
 
-The project is written in French (comments, README, agent prompts) with English for code identifiers and CLAUDE.md instructions.
+The project is written in English.
 
 ## Architecture
 

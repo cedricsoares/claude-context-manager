@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — Installer for memory-keeper-hooks
-# Extension du plugin memory-keeper-workflow : ajoute hooks + sub-agent journal
-# Idempotent — peut être relancé sans risque
+# Extends the memory-keeper-workflow plugin: adds hooks + journal sub-agent
+# Idempotent — safe to re-run
 
 set -euo pipefail
 
