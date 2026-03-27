@@ -201,3 +201,49 @@ captures unfinished tasks, saves all decisions, and prepares restoration instruc
 
 Then notify the user:
 > "Context is at 70%+. Compaction checkpoint saved. Consider starting a fresh session."
+
+---
+
+## Orchestration Sessions
+
+When the session involves spawning sub-agents (via the `Agent` tool):
+
+### Passing context to sub-agents
+
+Before spawning any sub-agent, always pass relevant memory-keeper context in its prompt.
+Sub-agents that don't have the `memory-keeper-mixin` skill cannot read MCP directly —
+the orchestrator is their only source of prior context.
+
+Include in the sub-agent prompt:
+- Relevant `root_cause` or `error` entries from semantic search
+- Current investigation state from `progress` entries
+- Key decisions already made from `decision` entries
+
+### Session_end for orchestration sessions
+
+When closing a session that involved sub-agents, the `session_end` entry should include:
+```
+agents_spawned: {count}
+agent_summary:
+  - {agent_type}: {one-line outcome}
+```
+
+### TODO reconciliation with sub-agent entries
+
+When reconciling TODOs at commit time, also check for entries saved by sub-agents:
+```
+mcp__memory-keeper__context_get({
+  channel: "{project}",
+  category: "progress",
+  limit: 10,
+  sort: "created_desc"
+})
+```
+
+Look for entries with `source_agent` in their value to include sub-agent findings.
+
+### Context protection during orchestration
+
+Each sub-agent spawn adds returned text to the orchestrator's context.
+If context exceeds 70%, run `context_prepare_compaction()` **before** spawning another sub-agent.
+Consider closing the session and starting fresh rather than risking compaction mid-orchestration.

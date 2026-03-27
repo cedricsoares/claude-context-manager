@@ -143,6 +143,37 @@ value:
 
 ---
 
+## Multi-Agent Feature Sessions
+
+When orchestrating multiple sub-agents for a feature implementation:
+
+### Before spawning sub-agents
+
+The orchestrator must share relevant context from memory-keeper in the sub-agent's prompt:
+- Architecture `decision` entries already made (to avoid re-debating settled choices)
+- `progress` entries showing what is already built
+- `test_result` entries showing what has been validated
+
+### Sub-agent configuration
+
+For custom sub-agents you control:
+```yaml
+skills:
+  - memory-keeper-mixin      # conventions for reading/writing
+mcpServers:
+  - memory-keeper             # reuses parent's MCP connection
+```
+
+For third-party agents: no modification needed. The `SubagentStop` hook captures their work automatically.
+
+### After sub-agent returns
+
+1. Check if `decision` or `progress` entries were saved by the sub-agent
+2. Verify that implementation choices are consistent with prior decisions
+3. If context exceeds 70%: run `context_prepare_compaction` before spawning another sub-agent
+
+---
+
 ## Feature Completion Checklist
 
 Before closing a feature session as complete, verify:

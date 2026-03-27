@@ -94,6 +94,15 @@ print(','.join(tools))
     DETECTED="write_edit"
   fi
 
+  # Check for orchestration (2+ Agent tool calls = substantive orchestration session)
+  if [ "$SHOULD_TRIGGER" = "false" ]; then
+    AGENT_CALL_COUNT=$(echo "$LAST_TOOLS" | tr ',' '\n' | grep -c "^Agent$" || true)
+    if [ "$AGENT_CALL_COUNT" -ge 2 ]; then
+      SHOULD_TRIGGER=true
+      DETECTED="orchestrator"
+    fi
+  fi
+
   # Check for significant Bash commands
   if [ "$SHOULD_TRIGGER" = "false" ]; then
     LAST_BASH_COMMANDS=$(tail -n 100 "$TRANSCRIPT" | python3 -c "
