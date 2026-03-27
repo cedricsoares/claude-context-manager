@@ -181,6 +181,47 @@ value:
 
 ---
 
+## Multi-Agent Debug Sessions
+
+When orchestrating multiple sub-agents for a debug session:
+
+### Before spawning sub-agents
+
+The orchestrator (you) must perform Step 1 (semantic search for similar bugs) **before** spawning any sub-agent. Pass the results directly in the sub-agent's prompt so it benefits from prior context — even if it has no direct access to memory-keeper.
+
+Example prompt for a sub-agent:
+```
+Investigate the API 500 error on /users.
+Prior context from memory-keeper: a similar bug was resolved on 2026-03-15
+(branch fix-auth-null). Root cause was a missing null check in middleware.py.
+```
+
+### Sub-agent configuration
+
+For custom sub-agents you control, add memory-keeper access:
+```yaml
+skills:
+  - memory-keeper-mixin      # conventions for reading/writing
+  - memory-keeper-debug       # debug workflow (optional, for deep investigation)
+mcpServers:
+  - memory-keeper             # reuses parent's MCP connection
+```
+
+For third-party agents (VoltAgent, community agents): no modification needed. The `SubagentStop` hook automatically captures their work and journals it in memory-keeper.
+
+### After sub-agent returns
+
+1. Check if `hypothesis` or `root_cause` entries were saved (by the sub-agent or the hook)
+2. If the sub-agent found the root cause: verify and save `root_cause` if not already saved
+3. Update the investigation state based on the sub-agent's findings
+4. If context exceeds 70%: run `context_prepare_compaction` before spawning another sub-agent
+
+### Entries saved by sub-agents
+
+Sub-agent entries include `source_agent: {agent_name}` in their metadata. This field distinguishes sub-agent findings from orchestrator-level entries. When reconciling results, query by channel and check `source_agent` values.
+
+---
+
 ## Anti-patterns to avoid
 
 - Saving every investigation step as `progress` — use `hypothesis` instead
@@ -188,3 +229,4 @@ value:
 - Deleting `error` entries after resolution — they are permanent reference
 - Starting investigation without semantic search on existing `root_cause` entries
 - Using `context_get` with category filter instead of `context_semantic_search` for similarity search
+- Spawning sub-agents without first performing semantic search and passing results in their prompt

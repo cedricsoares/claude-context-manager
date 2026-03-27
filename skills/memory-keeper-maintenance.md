@@ -170,9 +170,44 @@ value:
 
 ---
 
+## Multi-Agent Maintenance Sessions
+
+When orchestrating multiple sub-agents for maintenance work:
+
+### Before spawning sub-agents
+
+The orchestrator must share critical context in the sub-agent's prompt:
+- The `baseline` entry (before state, rollback plan) — sub-agents must know what they can break
+- Any `checkpoint` entries saved before destructive operations
+- `progress` entries showing what has already been changed
+
+**Critical**: never let a sub-agent perform a destructive operation (delete, rename, major version bump) without first saving a `checkpoint` entry at the orchestrator level.
+
+### Sub-agent configuration
+
+For custom sub-agents you control:
+```yaml
+skills:
+  - memory-keeper-mixin      # conventions for reading/writing
+mcpServers:
+  - memory-keeper             # reuses parent's MCP connection
+```
+
+For third-party agents: no modification needed. The `SubagentStop` hook captures their work automatically.
+
+### After sub-agent returns
+
+1. Verify that `test_result` entries confirm no regression
+2. Check if `progress` entries document before/after state for each change
+3. If the sub-agent revealed adjacent debt: save as `backlog`, not `todo`
+4. If context exceeds 70%: run `context_prepare_compaction` before spawning another sub-agent
+
+---
+
 ## Anti-patterns to avoid
 
 - Starting destructive operations without a checkpoint entry
 - Saving scope creep as `progress` — use `backlog` for adjacent debt
 - Not testing after each significant change
 - Claiming maintenance is complete without a passing `test_result`
+- Letting a sub-agent perform destructive operations without an orchestrator-level checkpoint

@@ -273,6 +273,93 @@ Inform the user of what was saved.
 
 ---
 
+### Case E: trigger = "subagent_stop"
+
+A sub-agent has completed its work. You receive additional inputs:
+- `agent_type`: the sub-agent's name (e.g., "error-detective", "code-reviewer")
+- `agent_transcript_path`: path to the sub-agent's own transcript file
+- `last_assistant_message`: the sub-agent's final response (truncated to 2000 chars)
+- `self_journaled`: "true" if the sub-agent already saved entries to memory-keeper
+- `detected_event`: "write_edit" or "bash_significant"
+
+**E1. Read the sub-agent's transcript**
+
+```bash
+tail -n 120 "{agent_transcript_path}" | python3 -c "
+import sys, json
+items = []
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        obj = json.loads(line)
+        t = obj.get('type', '')
+        content = obj.get('message', {}).get('content', [])
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get('type') == 'text':
+                    role = 'USER' if t == 'user' else 'CLAUDE'
+                    items.append(f'{role}: {block[\"text\"][:300]}')
+                elif block.get('type') == 'tool_use':
+                    name = block.get('name', '')
+                    inp = block.get('input', {})
+                    cmd = inp.get('command', inp.get('file_path', ''))[:150]
+                    items.append(f'TOOL: {name}({cmd})')
+    except:
+        pass
+for item in items[-40:]:
+    print(item)
+" 2>/dev/null
+```
+
+**E2. If self_journaled = "true"**
+
+The sub-agent already saved entries. Check what exists to avoid duplicates:
+
+```
+mcp__memory-keeper__context_get({
+  channel: "{project}",
+  limit: 5,
+  sort: "created_desc"
+})
+```
+
+Only save a complementary `progress` entry summarizing the sub-agent's contribution:
+
+```
+key:      {project}_{branch-short}_progress_{agent_type}-done
+category: progress
+channel:  {project}
+priority: normal
+value:
+  project:      {project}
+  branch:       {branch}
+  date:         {YYYY-MM-DD}
+  source_agent: {agent_type}
+  ---
+  status: sub-agent {agent_type} completed — {one line summary from last_assistant_message}
+  next:   {what the orchestrator should do next}
+```
+
+**E3. If self_journaled = "false"**
+
+The sub-agent did not save anything. Apply the full deterministic taxonomy
+from Case B/C to the sub-agent's transcript. Use the same category rules
+and entry formats, but add `source_agent: {agent_type}` to every entry.
+
+**Important**: Read the sub-agent's transcript carefully. The sub-agent may have:
+- Identified a bug → save as `error`
+- Tested hypotheses → save each as `hypothesis`
+- Found a root cause → save as `root_cause`
+- Run tests → save as `test_result`
+- Made architectural decisions → save as `decision`
+- Completed a milestone → save as `progress`
+
+---
+
 ## Absolute rules
 
 - **Never save sensitive values**: tokens, passwords, API keys — never.

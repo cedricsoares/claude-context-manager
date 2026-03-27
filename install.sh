@@ -219,32 +219,57 @@ else
   echo "  + journal.md — installed"
 fi
 
+# Install example agents
+EXAMPLES_SRC="$SCRIPT_DIR/agents/examples"
+EXAMPLES_DEST="$AGENTS_DIR/examples"
+if [ -d "$EXAMPLES_SRC" ]; then
+  mkdir -p "$EXAMPLES_DEST"
+  for example in "$EXAMPLES_SRC"/*.md; do
+    filename=$(basename "$example")
+    dest="$EXAMPLES_DEST/$filename"
+    if [ -f "$dest" ]; then
+      if diff -q "$example" "$dest" &>/dev/null; then
+        echo "  ✓ examples/$filename — already up to date"
+      else
+        cp "$example" "$dest"
+        echo "  ↑ examples/$filename — updated"
+      fi
+    else
+      cp "$example" "$dest"
+      echo "  + examples/$filename — installed"
+    fi
+  done
+fi
+
 echo ""
 
 # ─────────────────────────────────────────────
-# STEP 6 — Install hook script
+# STEP 6 — Install hook scripts
 # ─────────────────────────────────────────────
-echo "── Step 6: Installing hook script"
+echo "── Step 6: Installing hook scripts"
 
 mkdir -p "$HOOKS_DIR"
 
-HOOK_SRC="$SCRIPT_DIR/hooks/journal-trigger.sh"
-HOOK_DEST="$HOOKS_DIR/journal-trigger.sh"
+for hook in "$SCRIPT_DIR/hooks/"*.sh; do
+  filename=$(basename "$hook")
+  dest="$HOOKS_DIR/$filename"
 
-if [ -f "$HOOK_DEST" ]; then
-  if diff -q "$HOOK_SRC" "$HOOK_DEST" &>/dev/null; then
-    echo "  ✓ journal-trigger.sh — already up to date"
+  if [ -f "$dest" ]; then
+    if diff -q "$hook" "$dest" &>/dev/null; then
+      echo "  ✓ $filename — already up to date"
+    else
+      cp "$hook" "$dest"
+      echo "  ↑ $filename — updated"
+    fi
   else
-    cp "$HOOK_SRC" "$HOOK_DEST"
-    echo "  ↑ journal-trigger.sh — updated"
+    cp "$hook" "$dest"
+    echo "  + $filename — installed"
   fi
-else
-  cp "$HOOK_SRC" "$HOOK_DEST"
-  echo "  + journal-trigger.sh — installed"
-fi
 
-chmod +x "$HOOK_DEST"
-echo "  ✓ journal-trigger.sh — executable"
+  chmod +x "$dest"
+done
+
+echo "  ✓ hook scripts — executable"
 
 echo ""
 
@@ -279,12 +304,17 @@ echo "  ~/.claude/skills/memory-keeper-session.md"
 echo "  ~/.claude/skills/memory-keeper-feature.md"
 echo "  ~/.claude/skills/memory-keeper-debug.md"
 echo "  ~/.claude/skills/memory-keeper-maintenance.md"
+echo "  ~/.claude/skills/memory-keeper-mixin.md"
 echo ""
 echo "Installed sub-agent:"
 echo "  ~/.claude/agents/journal.md"
 echo ""
-echo "Installed hook:"
-echo "  ~/.claude/hooks/journal-trigger.sh"
+echo "Installed hooks:"
+echo "  ~/.claude/hooks/journal-trigger.sh        (Stop + PreCompact)"
+echo "  ~/.claude/hooks/subagent-journal-trigger.sh (SubagentStop)"
+echo ""
+echo "Example agents:"
+echo "  ~/.claude/agents/examples/debug-investigator.md"
 echo ""
 echo "CLAUDE.md updated: ~/.claude/CLAUDE.md"
 echo ""

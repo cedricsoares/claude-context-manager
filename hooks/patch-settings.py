@@ -8,8 +8,9 @@ from datetime import datetime
 #
 # Idempotent — checks if hooks are already present before adding.
 
-SETTINGS_PATH = os.path.expanduser("~/.claude/settings.json")
-HOOK_SCRIPT   = os.path.expanduser("~/.claude/hooks/journal-trigger.sh")
+SETTINGS_PATH        = os.path.expanduser("~/.claude/settings.json")
+HOOK_SCRIPT          = os.path.expanduser("~/.claude/hooks/journal-trigger.sh")
+SUBAGENT_HOOK_SCRIPT = os.path.expanduser("~/.claude/hooks/subagent-journal-trigger.sh")
 
 HOOKS_TO_ADD = {
     "Stop": [
@@ -30,6 +31,18 @@ HOOKS_TO_ADD = {
                 {
                     "type": "command",
                     "command": HOOK_SCRIPT,
+                    "async": True,
+                    "timeout": 120
+                }
+            ]
+        }
+    ],
+    "SubagentStop": [
+        {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": SUBAGENT_HOOK_SCRIPT,
                     "async": True,
                     "timeout": 120
                 }

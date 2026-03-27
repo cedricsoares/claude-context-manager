@@ -27,7 +27,7 @@ Huge thanks to [@mkreyman](https://github.com/mkreyman) for building and maintai
 
 ## What this project adds
 
-Three automation layers on top of the MCP server:
+Four automation layers on top of the MCP server:
 
 ### Hook layer (`hooks/journal-trigger.sh`)
 
@@ -65,6 +65,17 @@ Four session lifecycle protocols that structure how context is captured dependin
 | `memory-keeper-feature` | Feature branches | Linear: investigate → implement → test → document |
 | `memory-keeper-debug` | Bug investigations | Non-linear: symptom → hypotheses → dead ends → root cause |
 | `memory-keeper-maintenance` | Refactors, migrations | Before/after state capture, rollback points |
+| `memory-keeper-mixin` | Any sub-agent (opt-in) | Compact conventions for sub-agents to read/write memory-keeper |
+
+### Multi-agent orchestration layer
+
+When Claude Code orchestrates multiple sub-agents, the system provides three complementary mechanisms:
+
+1. **`SubagentStop` hook** (`hooks/subagent-journal-trigger.sh`) — Universal safety net that fires when any sub-agent completes. Reads the sub-agent's own transcript, detects significant work, and triggers the journal agent. Works with any agent (custom or third-party) without modification.
+
+2. **`memory-keeper-mixin` skill** — Compact conventions that any custom sub-agent can load via `skills: [memory-keeper-mixin]`. Enables direct read/write access to memory-keeper (semantic search before acting, structured saves during work).
+
+3. **Orchestrator guidance** — Each workflow skill (debug, feature, maintenance) includes instructions for the orchestrator to pass memory-keeper context in sub-agent prompts, ensuring even agents without the mixin benefit from prior context.
 
 ## Architecture
 
@@ -88,6 +99,19 @@ Claude Code session
 │  mcp-memory-keeper  │   Persists to SQLite,
 │  (MCP server)       │   indexes, searches
 └────────┬────────────┘
+
+Multi-agent flow (SubagentStop):
+
+Claude Code session
+  ├── spawns sub-agent A ──► work ──► SubagentStop hook fires
+  │                                    ├── reads sub-agent transcript
+  │                                    ├── detects significant work
+  │                                    └── spawns journal agent ──► saves to MCP
+  ├── spawns sub-agent B ──► work ──► SubagentStop hook fires
+  │                                    └── (same flow)
+  └── session ends ──► Stop hook fires
+                        ├── detects 2+ Agent calls → "orchestrator"
+                        └── spawns journal agent ──► saves synthesis
          │
          ▼
     ~/mcp-data/
@@ -115,10 +139,10 @@ The installer is idempotent (safe to run multiple times) and performs these step
 1. Checks prerequisites (node, npx, python3, jq)
 2. Installs `mcp-memory-keeper` globally via npm (if not present)
 3. Registers the MCP server in `~/.claude.json` (if not configured)
-4. Copies skills to `~/.claude/skills/`
-5. Copies the journal sub-agent to `~/.claude/agents/`
-6. Copies the hook script to `~/.claude/hooks/`
-7. Patches `~/.claude/settings.json` with Stop and PreCompact hooks
+4. Copies skills (including `memory-keeper-mixin`) to `~/.claude/skills/`
+5. Copies the journal sub-agent to `~/.claude/agents/` (+ example agents to `agents/examples/`)
+6. Copies hook scripts (`journal-trigger.sh` + `subagent-journal-trigger.sh`) to `~/.claude/hooks/`
+7. Patches `~/.claude/settings.json` with Stop, PreCompact, and SubagentStop hooks
 8. Merges workflow instructions into `~/.claude/CLAUDE.md`
 
 After installation, **restart Claude Code** to activate.
@@ -169,6 +193,26 @@ This loads the appropriate skill, which adapts how context is captured:
 > "Journal this progress"
 > "Remember that we rejected approach X because..."
 
+### Multi-agent sessions
+
+When Claude Code orchestrates multiple sub-agents, the system captures their work automatically via the `SubagentStop` hook. No manual intervention needed — each sub-agent's transcript is analyzed and journaled independently.
+
+To give a custom sub-agent direct access to memory-keeper, add to its frontmatter:
+
+```yaml
+---
+name: my-agent
+skills:
+  - memory-keeper-mixin
+mcpServers:
+  - memory-keeper
+---
+```
+
+See `agents/examples/debug-investigator.md` for a complete example.
+
+Third-party agents work without modification — the `SubagentStop` hook captures their work as a safety net.
+
 ### Closing a session
 
 Session closing is **automatic on `git commit`** — the hook detects the commit, greps TODOs from modified files, and saves a `session_end` entry with what was done, what's blocked, and the next step.
@@ -215,6 +259,9 @@ echo '{"hook_event_name":"PreCompact","trigger":"manual","transcript_path":"","c
 ```bash
 rm ~/.claude/agents/journal.md
 rm ~/.claude/hooks/journal-trigger.sh
+rm ~/.claude/hooks/subagent-journal-trigger.sh
+rm ~/.claude/skills/memory-keeper-mixin.md
+rm -rf ~/.claude/agents/examples/
 rm ~/.claude/skills/memory-keeper-*.md
 # Restore settings.json backup if needed
 ls ~/.claude/settings.json.backup-*
